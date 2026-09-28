@@ -1,7 +1,5 @@
-version: 2026.232.0520
 whisper:
     candy:
-        version: 2026.243.0100
         description: |
             OpenAI Whisper local speech-to-text CLI (GPU-capable)
             Installs openai-whisper via pixi into the default env, composing the
