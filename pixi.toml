@@ -5,3 +5,8 @@ platforms = ["linux-64"]
 
 [dependencies]
 openai-whisper = "*"
+# The charly-owned OpenAI-compatible ASR surface (app.py). Upstream `openai/whisper` ships
+# no HTTP server at all, so the service and its HTTP layer live in this candy.
+fastapi = "*"
+uvicorn = "*"
+python-multipart = "*"
