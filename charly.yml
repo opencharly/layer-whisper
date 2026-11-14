@@ -140,6 +140,21 @@ whisper:
                 curl -sf -F file=@"${HOME}/whisper-asr/fixtures/jfk.flac" \
                      -F language=en \
                      http://127.0.0.1:9000/v1/audio/transcriptions
+            - check: a model this server does not serve is refused, naming both
+              id: whisper-model-mismatch-refused
+              context:
+                - runtime
+              timeout: 300s
+              eventually: 5m
+              retry_interval: 5s
+              exit_status: 0
+              stdout:
+                - contains: "400"
+              command: |
+                curl -s -o /dev/null -w '%{http_code}' \
+                     -F file=@"${HOME}/whisper-asr/fixtures/jfk.flac" \
+                     -F model=tiny \
+                     http://127.0.0.1:9000/v1/audio/transcriptions
 
 whisper-skill:
     skill:
