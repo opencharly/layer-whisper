@@ -1,30 +1,145 @@
 whisper:
     candy:
         description: |
-            OpenAI Whisper local speech-to-text CLI (GPU-capable)
-            Installs openai-whisper via pixi into the default env, composing the
-            python + cuda + ffmpeg candies (ffmpeg is required for audio
-            decoding). Verifiable: the whisper CLI lands in the pixi default env,
-            runs `--help`, and ffmpeg is available for decoding.
+            OpenAI Whisper speech-to-text, served as an OpenAI-compatible ASR endpoint.
+            Installs openai-whisper through pixi and runs a charly-owned FastAPI app
+            (app.py) as a supervised service on port 9000: POST /v1/audio/transcriptions
+            (multipart `file`, optional `model`/`language`) returns a JSON body whose
+            top-level `text` is what Open Web UI reads, plus GET /health and GET /v1/models.
+            The checkpoint is loaded once per process and reused (never a CLI invocation per
+            request), prefetched onto a volume by the start script so the first request does
+            not pay for a download, and every knob below is env-configurable at deploy time.
+            env_provide publishes WHISPER_BASE_URL so a consumer (e.g. the openwebui candy)
+            discovers the endpoint through charly instead of a hand-typed variable.
+            Verifiable: the service answers /health, serves an OpenAI-shaped model list, and
+            transcribes a committed fixture through its own HTTP surface.
         require:
-            - '@github.com/opencharly/layer-python:v2026.273.1820'
-            - '@github.com/opencharly/layer-cuda:v2026.290.1513'
-            - '@github.com/opencharly/layer-ffmpeg:v2026.272.0056'
+            - '@github.com/opencharly/layer-python:v2026.314.0709'
+            - '@github.com/opencharly/layer-ffmpeg:v2026.314.0706'
+        env_accept:
+            - name: WHISPER_MODEL
+              description: "Checkpoint to serve: tiny|base|small|medium|large-v3|turbo (default base)"
+            - name: WHISPER_DEVICE
+              description: "Torch device: cpu|cuda|cuda:N (default cpu)"
+            - name: WHISPER_FP16
+              description: "true|false — fp16 decode (default false; a CPU host must keep it false)"
+            - name: WHISPER_LANGUAGE
+              description: "Default language hint; empty means auto-detect"
+            - name: WHISPER_TASK
+              description: "transcribe|translate (default transcribe)"
+            - name: WHISPER_BEAM_SIZE
+              description: "Decode beam size (default 5)"
+            - name: WHISPER_PORT
+              description: "Served port (default 9000)"
+            - name: WHISPER_MAX_UPLOAD_MB
+              description: "Request body cap in MiB (default 25)"
+        secret_accept:
+            - name: WHISPER_API_KEY
+              description: "Optional bearer token this server requires. Unset means the endpoint is deliberately open (logged at startup)"
+              key: charly/api-key/whisper
+        env_provide:
+            # Product-scoped, like every other provide in the org (QDRANT_URL, OLLAMA_HOST,
+            # STRATA_BASE_URL, ...). The '/v1' is part of the contract: Open Web UI APPENDS
+            # '/audio/transcriptions' to the configured base URL.
+            WHISPER_BASE_URL: "http://{{.ContainerName}}:9000/v1"
+        port:
+            - 9000
+        volume:
+            - name: whisper-models
+              path: "~/.cache/whisper"
+        service:
+            - name: whisper-asr
+              exec: "%(ENV_HOME)s/.local/bin/whisper-asr-start"
+              restart: always
+              enable: true
+              scope: system
         plan:
-            - check: the whisper CLI is installed in the pixi default env
-              file:
-                file: ${HOME}/.pixi/envs/default/bin/whisper
-                exists: true
-            - check: the whisper CLI runs and prints its usage
+            - run: mkdir=${HOME}/.local/bin
+              mkdir: "${HOME}/.local/bin"
+              run_as: "${USER}"
+            - run: copy the charly-owned ASR app
+              copy: app.py
+              to: "${HOME}/whisper-asr/app.py"
+              run_as: "${USER}"
+            - run: copy the fixture the transcription check decodes
+              copy: fixtures/jfk.flac
+              to: "${HOME}/whisper-asr/fixtures/jfk.flac"
+              run_as: "${USER}"
+            - run: write the start script — prefetch the checkpoint, then exec uvicorn
+              write: "${HOME}/.local/bin/whisper-asr-start"
+              mode: "0755"
+              run_as: "${USER}"
+              content: |
+                  #!/bin/bash
+                  # charly-owned start script. Two jobs:
+                  #  1. prefetch the checkpoint onto the volume BEFORE the service binds, so
+                  #     the first user request never pays for a download (Open Web UI's STT
+                  #     budget is 300 s per attempt);
+                  #  2. exec uvicorn against app:app from the app directory.
+                  set -euo pipefail
+
+                  export WHISPER_MODEL="${WHISPER_MODEL:-base}"
+                  export WHISPER_DEVICE="${WHISPER_DEVICE:-cpu}"
+                  export WHISPER_PORT="${WHISPER_PORT:-9000}"
+                  CACHE_DIR="${HOME}/.cache/whisper"
+                  export WHISPER_CACHE_DIR="$CACHE_DIR"
+                  mkdir -p "$CACHE_DIR"
+
+                  cd "${HOME}/whisper-asr"
+
+                  "$HOME/.pixi/envs/default/bin/python" - <<'PY'
+                  import os, sys, whisper
+                  model = os.environ["WHISPER_MODEL"]
+                  cache = os.environ["WHISPER_CACHE_DIR"]
+                  print(f"prefetching checkpoint {model} into {cache}", flush=True)
+                  whisper.load_model(model, download_root=cache)
+                  print("prefetch complete", flush=True)
+                  PY
+
+                  exec "$HOME/.pixi/envs/default/bin/uvicorn" app:app \
+                      --host 0.0.0.0 --port "$WHISPER_PORT"
+            - check: the ASR service answers its health endpoint
+              id: whisper-health
+              context:
+                - runtime
+              timeout: 30s
+              eventually: 3m
+              retry_interval: 2s
+              http:
+                http: http://127.0.0.1:${HOST_PORT:9000}/health
+                status: 200
+                body:
+                  - contains: '"status":"ok"'
+            - check: the served API advertises an OpenAI-shaped model list
+              id: whisper-models-listed
+              context:
+                - runtime
+              timeout: 30s
+              eventually: 3m
+              retry_interval: 2s
+              http:
+                http: http://127.0.0.1:${HOST_PORT:9000}/v1/models
+                status: 200
+                body:
+                  - contains: '"object":"list"'
+            - check: the served API transcribes the committed fixture and returns its words
+              id: whisper-transcribes-fixture
+              context:
+                - runtime
+              timeout: 300s
+              eventually: 5m
+              retry_interval: 5s
               exit_status: 0
               stdout:
-                - contains: "--model"
-              command: ${HOME}/.pixi/envs/default/bin/whisper --help
-            - check: ffmpeg is available on PATH for audio decoding
-              exit_status: 0
-              stdout:
-                - contains: ffmpeg
-              command: ffmpeg -version
+                - contains: "fellow Americans"
+              # NOTE the port: a `command:` check runs INSIDE the container, where the
+              # service listens on its container port (9000). `${HOST_PORT:...}` is the
+              # host-side mapping and belongs only to host-side probes (`http:`/`addr:`),
+              # which is why those two checks above use it and this one does not.
+              command: |
+                curl -sf -F file=@"${HOME}/whisper-asr/fixtures/jfk.flac" \
+                     -F language=en \
+                     http://127.0.0.1:9000/v1/audio/transcriptions
 
 whisper-skill:
     skill:
@@ -32,5 +147,6 @@ whisper-skill:
         family: tools
         owner: whisper
         description: |-
-            OpenAI Whisper local speech-to-text.
-            Use when working with the whisper candy.
+            OpenAI Whisper speech-to-text, served as an OpenAI-compatible ASR endpoint.
+            Use when working with the whisper candy, its STT service, or wiring a
+            speech-to-text backend into another pod.

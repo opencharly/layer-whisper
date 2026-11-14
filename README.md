@@ -1,9 +1,9 @@
 # layer-whisper
 
-OpenAI Whisper local speech-to-text for OpenCharly images, GPU-capable.
+OpenAI Whisper speech-to-text, served as an OpenAI-compatible ASR endpoint for OpenCharly pods.
 
 The `whisper` candy installs [openai-whisper](https://github.com/openai/whisper)
-via pixi into the default environment, composing the `python`, `cuda`, and
+via pixi into the default environment, composing the `python` and
 `ffmpeg` layers (ffmpeg is required for audio decoding). The whisper CLI lands in
 the pixi default env and runs offline against local models.
 
@@ -13,7 +13,7 @@ the pixi default env and runs offline against local models.
 |---|---|
 | Layer / candy | `whisper` |
 | Binary | `~/.pixi/envs/default/bin/whisper` |
-| Requires | `layer-python`, `layer-cuda`, `layer-ffmpeg` |
+| Requires | `layer-python`, `layer-ffmpeg` |
 | Env files | `charly.yml`, `pixi.toml` |
 | Service / port | none |
 
@@ -52,8 +52,8 @@ and prints `--model` in its usage, and that `ffmpeg` is on PATH for decoding.
 
 - Owning skill: `/charly-tools:whisper`
 - `/charly-languages:python` — Python runtime (required)
-- `/charly-distros:cuda` — CUDA toolkit (required)
+- `/charly-distros:cuda` — CUDA toolkit, only if you switch `WHISPER_DEVICE` to `cuda` (the pixi env resolves CPU-only torch today)
 - `/charly-selkies:ffmpeg` — FFmpeg multimedia with nonfree codecs (required)
-- `/charly-tools:sherpa-onnx` — alternative STT engine (ONNX-based, lighter weight)
+- `/charly-tools:sherpa-onnx` — text-to-speech (TTS), not an STT alternative
 - [`opencharly/charly`](https://github.com/opencharly/charly) — the charly CLI and image builder
 - [`opencharly/opencharly`](https://github.com/opencharly/opencharly) — the umbrella
