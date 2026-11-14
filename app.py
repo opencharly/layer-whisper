@@ -38,7 +38,6 @@ from __future__ import annotations
 import logging
 import os
 import shutil
-import sys
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path

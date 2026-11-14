@@ -15,7 +15,7 @@ the pixi default env and runs offline against local models.
 | Binary | `~/.pixi/envs/default/bin/whisper` |
 | Requires | `layer-python`, `layer-ffmpeg` |
 | Env files | `charly.yml`, `pixi.toml` |
-| Service / port | none |
+| Service / port | `whisper-asr` — OpenAI-compatible ASR on **9000** |
 
 ## How to use it
 

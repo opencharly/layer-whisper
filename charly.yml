@@ -137,7 +137,8 @@ whisper:
               # host-side mapping and belongs only to host-side probes (`http:`/`addr:`),
               # which is why those two checks above use it and this one does not.
               command: |
-                curl -sf -F file=@"${HOME}/whisper-asr/fixtures/jfk.flac" \
+                curl -sf -H "Authorization: Bearer $WHISPER_API_KEY" \
+                     -F file=@"${HOME}/whisper-asr/fixtures/jfk.flac" \
                      -F language=en \
                      http://127.0.0.1:9000/v1/audio/transcriptions
             - check: a model this server does not serve is refused, naming both
@@ -152,6 +153,7 @@ whisper:
                 - contains: "400"
               command: |
                 curl -s -o /dev/null -w '%{http_code}' \
+                     -H "Authorization: Bearer $WHISPER_API_KEY" \
                      -F file=@"${HOME}/whisper-asr/fixtures/jfk.flac" \
                      -F model=tiny \
                      http://127.0.0.1:9000/v1/audio/transcriptions
