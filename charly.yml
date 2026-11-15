@@ -163,7 +163,10 @@ whisper-skill:
         name: whisper
         family: tools
         owner: whisper
-        description: |-
-            OpenAI Whisper speech-to-text, served as an OpenAI-compatible ASR endpoint.
-            Use when working with the whisper candy, its STT service, or wiring a
-            speech-to-text backend into another pod.
+        # ROUTING ONLY. The published prose is the file's frontmatter at
+        # `.agents/skills/whisper/SKILL.md`, which is the one source the corpus projects.
+        # This node used to carry a SECOND description that had drifted from the file's
+        # (three sentences here vs two there), and the marketplace generator hard-errors on
+        # the disagreement — skill "whisper": the node's inline `description:` and its
+        # file's frontmatter disagree — which blocked the whole corpus build
+        # (opencharly/marketplace#613). Keep prose in the file.
