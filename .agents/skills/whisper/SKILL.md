@@ -1,8 +1,9 @@
 ---
 name: whisper
-description: 'OpenAI Whisper local speech-to-text.
-
-  Use when working with the whisper candy.'
+description: >-
+  OpenAI Whisper speech-to-text, served as an OpenAI-compatible ASR endpoint.
+  Use when working with the whisper candy, its STT service, or wiring a
+  speech-to-text backend into another pod.
 ---
 
 # whisper -- OpenAI Whisper STT
