@@ -44,6 +44,12 @@ whisper:
             WHISPER_BASE_URL: "http://{{.ContainerName}}:9000/v1"
         port:
             - 9000
+        env:
+            # A host-owned bind makes charly run the container as root under its keep-id
+            # mapping, where the runtime HOME is /root — while the model volume is mounted
+            # at the image user's ~/.cache/whisper. Pin it so a bound deployment uses the
+            # bound model cache instead of downloading into /root.
+            HOME: "/home/user"
         volume:
             - name: whisper-models
               path: "~/.cache/whisper"
