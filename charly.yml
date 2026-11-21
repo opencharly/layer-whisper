@@ -44,6 +44,12 @@ whisper:
             WHISPER_BASE_URL: "http://{{.ContainerName}}:9000/v1"
         port:
             - 9000
+        env:
+            # A host-owned bind makes charly run the container as root under its keep-id
+            # mapping, where the runtime HOME is /root — while the model volume is mounted
+            # at the image user's ~/.cache/whisper. Pin it so a bound deployment uses the
+            # bound model cache instead of downloading into /root.
+            HOME: "/home/user"
         volume:
             - name: whisper-models
               path: "~/.cache/whisper"
@@ -141,6 +147,23 @@ whisper:
                      -F file=@"${HOME}/whisper-asr/fixtures/jfk.flac" \
                      -F language=en \
                      http://127.0.0.1:9000/v1/audio/transcriptions
+            - check: a bound deployment resolves HOME to the image user, so the model cache is the bound store
+              id: whisper-home-pinned
+              context:
+                - runtime
+              timeout: 30s
+              exit_status: 0
+              stdout:
+                - contains: "HOME=/home/user"
+              # THE discriminating assertion for the HOME pin: a bound deployment runs the
+              # container as root under keep-id, where the runtime HOME is /root unless the
+              # candy pins it. Without the pin this check reports HOME=/root and fails —
+              # which the transcription check above would NOT, because a whisper server
+              # works fine from any cache, it just re-downloads there.
+              command: |
+                echo "HOME=$HOME"
+                test "$HOME" = "/home/user"
+                test -d "$HOME/.cache/whisper"
             - check: a model this server does not serve is refused, naming both
               id: whisper-model-mismatch-refused
               context:
