@@ -155,11 +155,13 @@ whisper:
               exit_status: 0
               stdout:
                 - contains: "HOME=/home/user"
-              # THE discriminating assertion for the HOME pin: a bound deployment runs the
-              # container as root under keep-id, where the runtime HOME is /root unless the
-              # candy pins it. Without the pin this check reports HOME=/root and fails —
-              # which the transcription check above would NOT, because a whisper server
-              # works fine from any cache, it just re-downloads there.
+              # The model cache lives under the image user's home, so this asserts the path a
+              # bound deployment actually resolves. A whisper pod carries no CDI device, so its
+              # bind selects keep-id with the image user (uid 1000) — HOME is already
+              # /home/user, and this check guards the CACHE PATH, not a user-namespace pin
+              # (the container-root shape, which has HOME=/root, needs a CDI device). The
+              # transcription check above would not catch a moved cache: a whisper server
+              # works from any cache, it just re-downloads there.
               command: |
                 echo "HOME=$HOME"
                 test "$HOME" = "/home/user"
